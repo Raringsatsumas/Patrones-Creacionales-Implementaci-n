@@ -1,0 +1,193 @@
+package vista;
+
+import controlador.SistemaLogistica;
+import modelo.Paquete;
+
+import javax.swing.*;
+import java.awt.*;
+
+/**
+ * Permite:
+
+ *   Elegir el tipo de bodega (ORIGEN / TRANSITO / DESTINO)
+ *   Ingresar datos de un paquete (código, peso, volumen)
+ *   Ejecutar acciones: Procesar movimiento, Consultar inventario, Actualizar registro y Eliminar registro
+ * 
+ * Todas las operaciones delegan en el {@link SistemaLogistica} (Controlador),
+ * el cual a su vez utiliza las fábricas concretas para crear los servicios.
+ * 
+ */
+public class MainView extends JFrame {
+
+    // Controles de la UI 
+    private final JComboBox<String> cbTipo =
+            new JComboBox<>(new String[]{"ORIGEN", "TRANSITO", "DESTINO"});
+
+    private final JTextField txtCodigo = new JTextField(14);
+    private final JTextField txtPeso   = new JTextField(8);
+    private final JTextField txtVol    = new JTextField(8);
+
+    private final JTextArea txtOut     = new JTextArea(18, 70);
+
+    // Controlador 
+    private final SistemaLogistica controller = new SistemaLogistica();
+
+    /**
+     * Crea e inicializa la ventana principal.
+     */
+    public MainView() {
+        super("Logística - Abstract Factory");
+        buildUI();
+    }
+
+    /**
+     * Construye el layout, los botones y registra los listeners.
+     */
+    private void buildUI() {
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        //  Panel de formulario
+        JPanel form = new JPanel(new GridBagLayout());
+        GridBagConstraints c = new GridBagConstraints();
+        c.insets = new Insets(6, 6, 6, 6);
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.gridx = 0; c.gridy = 0;
+
+        form.add(new JLabel("Bodega:"), c);
+        c.gridx = 1; c.weightx = 1.0; form.add(cbTipo, c); c.weightx = 0;
+
+        c.gridx = 0; c.gridy++;
+        form.add(new JLabel("Código paquete:"), c);
+        c.gridx = 1; form.add(txtCodigo, c);
+
+        c.gridx = 0; c.gridy++;
+        form.add(new JLabel("Peso (kg):"), c);
+        c.gridx = 1; form.add(txtPeso, c);
+
+        c.gridx = 0; c.gridy++;
+        form.add(new JLabel("Volumen (cm³):"), c);
+        c.gridx = 1; form.add(txtVol, c);
+
+        //  Botones de acciones 
+        JButton btnProc = new JButton("Procesar movimiento");
+        JButton btnInv  = new JButton("Consultar inventario");
+        JButton btnUpd  = new JButton("Actualizar registro");
+        JButton btnDel  = new JButton("Eliminar registro");
+        JButton btnClr  = new JButton("Limpiar");
+
+        btnProc.addActionListener(e -> procesar());
+        btnInv.addActionListener(e -> inventario());
+        btnUpd.addActionListener(e -> actualizar());
+        btnDel.addActionListener(e -> eliminar());
+        btnClr.addActionListener(e -> {
+            txtCodigo.setText(""); txtPeso.setText(""); txtVol.setText(""); txtOut.setText("");
+        });
+
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
+        actions.add(btnProc);
+        actions.add(btnInv);
+        actions.add(btnUpd);
+        actions.add(btnDel);
+        actions.add(btnClr);
+
+        //  Área de salida 
+        txtOut.setEditable(false);
+        txtOut.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+
+        //  Ensamblado de la ventana
+        add(form, BorderLayout.NORTH);
+        add(new JScrollPane(txtOut), BorderLayout.CENTER);
+        add(actions, BorderLayout.SOUTH);
+
+        pack();
+        setLocationRelativeTo(null);
+    }
+
+
+    // Acciones / Handlers
+
+    /**
+     * Ejecuta el flujo completo de negocio:
+     * Ingreso → Asignación de ubicación → Validación → (Aplicar movimiento / Salida) → Stock → Resumen.
+     */
+    private void procesar() {
+        try {
+            String tipo = cbTipo.getSelectedItem().toString();
+            String cod  = txtCodigo.getText().trim();
+            double peso = parseDouble(txtPeso.getText().trim(), "peso");
+            double vol  = parseDouble(txtVol.getText().trim(), "volumen");
+
+            Paquete p   = new Paquete(cod, peso, vol);
+            txtOut.setText(controller.procesarMovimiento(p, tipo));
+        } catch (Exception ex) {
+            mostrarError(ex.getMessage());
+        }
+    }
+
+    /**
+     * Muestra un resumen de inventario (por bodega) usando el producto de operación logística.
+     */
+    private void inventario() {
+        String tipo = cbTipo.getSelectedItem().toString();
+        txtOut.setText(controller.consultarInventario(tipo));
+    }
+
+    /**
+     * Actualiza el registro de un paquete ya ingresado (mismo código, nuevos peso/volumen).
+     */
+    private void actualizar() {
+        try {
+            String tipo = cbTipo.getSelectedItem().toString();
+            String cod  = txtCodigo.getText().trim();
+            double peso = parseDouble(txtPeso.getText().trim(), "peso");
+            double vol  = parseDouble(txtVol.getText().trim(), "volumen");
+
+            Paquete p   = new Paquete(cod, peso, vol);
+            txtOut.setText(controller.actualizarRegistro(p, tipo));
+        } catch (Exception ex) {
+            mostrarError(ex.getMessage());
+        }
+    }
+
+    /**
+     * Elimina el registro del paquete por código en la bodega actual.
+     */
+    private void eliminar() {
+        try {
+            String tipo = cbTipo.getSelectedItem().toString();
+            String cod  = txtCodigo.getText().trim();
+            if (cod.isEmpty()) throw new IllegalArgumentException("El código no puede estar vacío.");
+            txtOut.setText(controller.eliminarRegistro(cod, tipo));
+        } catch (Exception ex) {
+            mostrarError(ex.getMessage());
+        }
+    }
+
+    // 
+    // Utilidades de validación
+    //
+
+    /**
+     * Parsea un double mayor que 0; si hay error genera un mensaje
+     * @param s     texto a convertir
+     * @param campo nombre del campo para el mensaje de error
+     * @return valor double
+     */
+    private double parseDouble(String s, String campo) {
+        try {
+            double v = Double.parseDouble(s);
+            if (v <= 0) throw new NumberFormatException();
+            return v;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("El campo '" + campo + "' debe ser numérico > 0.");
+        }
+    }
+
+    /**
+     * Muestra un cuadro de diálogo con el error y no corta la aplicación.
+     * @param msg mensaje a mostrar
+     */
+    private void mostrarError(String msg) {
+        JOptionPane.showMessageDialog(this, msg, "Validación", JOptionPane.WARNING_MESSAGE);
+    }
+}
